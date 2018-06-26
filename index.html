@@ -1,0 +1,130 @@
+<!doctype html>
+<html>
+  <head>
+    <title>JARC Transmitter</title>
+    <style>
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+      body { font: 13px Helvetica, Arial; }
+      form { background: #000; padding: 3px; position: fixed; bottom: 0; width: 100%; }
+      form input { border: 0; padding: 10px; width: 90%; margin-right: .5%; }
+      form button { width: 9%; background: rgb(130, 224, 255); border: none; padding: 10px; }
+      #messages { list-style-type: none; margin: 10%; padding: 0; }
+      #messages li { padding: 5px 10px; }
+      #messages li:nth-child(odd) { background: #eee; }
+      #filelist { list-style-type: none; margin-left: 10%; padding: 0; }
+      #load-config { background: #fff; padding: 3px; position: fixed; bottom: 40px; width: 100%; }
+      .thumb {
+        height: 75px;
+        border: 1px solid #000;
+        margin: 10px 5px 0 0;
+      }      
+
+      .column {
+        float: left;
+        width: 30%;
+      }
+      /* Clear floats after the columns */
+      .row:after {
+        content: "";
+        display: table;
+        clear: both;
+      }
+    </style>
+
+    <!-- Plotly.js -->
+    <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+
+  </head>
+  <body>
+    <input type="file" id="files" name="files[]" multiple />
+    <output id="list"></output>
+
+
+    <div class="row">
+      <div class="column">
+        <div id="scatter-plot" style="height:300px;margin:5%"></div>
+      </div> 
+      <div class="column">
+        <div id="range-doppler-plot" style="height:300px;margin:5%"></div>
+      </div>
+      <div class="column">
+        <div id="range-profile-plot" style="height:300px;margin:5%"></div>
+      </div>
+    </div>
+
+    <div id="statistics">
+      <textarea rows="10" cols="50">Number of detected objects:
+      </textarea>
+    </div>
+
+
+    <ul id="messages"></ul>
+
+
+    <div id="load-config">
+        <div>
+          <h4 id="uart-cli-port">COM10</h4>
+          <button type="button" id="uart-toggle">Disconnect</button>
+        </div>
+        <br>
+        <label for="config">Load config file</label>
+        <br>
+        <input type="file" id="config" name='file' text="Load Config"/>
+    </div>
+      
+    <form id='command-form' action="">
+      <input id="m" autocomplete="off" /><button>Command</button>
+    </form>
+
+    <script src="ReedSolomon.js"></script>
+    <script src="client.js"></script>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="https://code.jquery.com/jquery-1.11.1.js"></script>
+
+    <script>
+/*
+var n = 20;
+var rs = new ReedSolomon(n);
+message = [...Array(10).keys()];
+var enc = rs.encodeByte(message);
+console.log(enc);
+*/
+      //const socket = io.connect('127.0.0.1:8000');
+      const socket = io.connect('127.0.0.1:8000');
+
+      //socket.emit('command', 'test');
+      //const socket = io();
+      $(function () {
+        //var socket = io();
+        $('form').submit(function(){
+          socket.emit('command', $('#m').val());
+          $('#m').val('');
+          return false;
+        });
+
+
+        socket.on('log', function(msg){
+          $('#messages').append($('<li>').text(msg));
+          //console.log(msg);
+        });      
+        socket.on('uart-close', function(msg){
+          $('#messages').append($('<li>').text("cli close"));
+        });
+        socket.on('uart-open', function(msg){
+          $('#messages').append($('<li>').text("cli open"));
+        });
+
+        socket.on('plot-radar', function(msg){
+          //console.log(msg);
+          plotRadar(msg);
+        });
+        socket.on('plot-range-profile', function(msg){
+          //console.log(msg);
+          plotRangeProfile(msg);
+        });
+      });
+    </script>
+
+  </body>
+</html>
