@@ -5,6 +5,25 @@
 var dummyTraceScatter = {
     x: [],
     y: [],
+    marker: {
+        size: 8,
+        color: 0,
+        colorscale: 'RdBu',
+        colorbar: {
+            thickness: 0.05,
+            thicknessmode: "fraction"
+        },
+        cmin: -20,
+        cmax: 20,
+        showscale: true
+    },
+    mode: 'markers',
+    type: 'scatter'
+};
+
+var dummyTraceRangeDoppler = {
+    x: [],
+    y: [],
     mode: 'markers',
     type: 'scatter'
 };
@@ -24,36 +43,79 @@ var layout = {
     xaxis2: {domain: [0.55, 1]}
 };
 */
+var genCircle = function(r) {
+    return {
+        'type': 'circle',
+        'xref': 'x',
+        'yref': 'y',
+        'x0': -r,
+        'y0': -r,
+        'x1': r,
+        'y1': r,
+        'line': {
+            'color': 'rgba(50, 90, 40, 0.8)',
+        },
+        //'layer': 'below',
+    }
+}
 
 var layoutScatter = {
     margin: {t: 0},
-    xaxis: {range: [-20, 20]},
-    yaxis: {range: [0, 20]}
+    xaxis: {range: [-20, 20], title: 'X axis (m)'},
+    yaxis: {range: [-5, 25], title: 'Y axis (m)'},
+    //plot_bgcolor: "#00067a"
+    plot_bgcolor: "#1b2b17",
+    'shapes': [
+        genCircle(5),
+        genCircle(10),
+        genCircle(15),
+        genCircle(20),
+    ]    
 };
 
 var layoutRangeDoppler = {
     margin: {t: 0},
-    xaxis: {range: [0, 50]},
-    yaxis: {range: [-50, 50]}
+    xaxis: {range: [0, 50], title: 'Range (m)'},
+    yaxis: {range: [-50, 50], title: 'Velocity (m/s)'},
+    plot_bgcolor: "#00067a"
 };
 
 var layoutRangeProfile = {
     margin: {t: 0},
-    xaxis: {range: [0, 256]},
-    yaxis: {range: [0, 15000]}
+    xaxis: {range: [0, 256], title: 'Range (m)'},
+    yaxis: {range: [0, 15000], title: 'Relative Power (dB)'}
 };
 
 
-Plotly.plot('scatter-plot', [dummyTraceScatter], layoutScatter);
-Plotly.plot('range-doppler-plot', [dummyTraceScatter], layoutRangeDoppler);
-Plotly.plot('range-profile-plot', [dummyTraceLine], layoutRangeProfile);
+Plotly.plot('scatter-plot', [dummyTraceScatter], layoutScatter, {scrollZoom: true});
+Plotly.plot('range-doppler-plot', [dummyTraceRangeDoppler], layoutRangeDoppler, {scrollZoom: true});
+Plotly.plot('range-profile-plot', [dummyTraceLine], layoutRangeProfile, {scrollZoom: true});
 
+resizePlots = ['scatter-plot', 'range-doppler-plot', 'range-profile-plot'];
+window.onresize = function() {
+    for (var i = 0; i < resizePlots.length; i++) {
+        Plotly.relayout(resizePlots[i], {
+            width: 0.32 * window.innerWidth,
+            height: $("#scatter-plot").height(),
+            //height: 0.24 * window.innerWidth,
+        });
+    }
+}
+
+//Plotly.restyle('scatter-plot', 'x', [[1]]);
+//Plotly.restyle('scatter-plot', 'y', [[5]]);
+//Plotly.restyle('scatter-plot', 'marker.color', [[-10]]);
 
 function plotRadar(msg) {
-    Plotly.restyle('scatter-plot', {x: [msg.x_coord], y: [msg.y_coord]});
+    //Plotly.restyle('scatter-plot', {x: [msg.x_coord], y: [msg.y_coord]});
     //console.log("Update plot");
+    Plotly.restyle('scatter-plot', 'x', [msg.x_coord]);
+    Plotly.restyle('scatter-plot', 'y', [msg.y_coord]);
+    
 
     Plotly.restyle('range-doppler-plot', {x: [msg.range], y: [msg.doppler]});
+
+   $("#radarSummary").val("Number of detected objects: " + msg.numDetectedObj);
 
 }
 
@@ -97,9 +159,6 @@ var dataQueue = [];
 
 var n = 20;
 var rs = new ReedSolomon(n);
-//message = [...Array(10).keys()];
-//var enc = rs.encodeByte(message);
-//console.log(enc);
 
 
 /*
@@ -129,7 +188,7 @@ function handleFileSelect(evt) {
     // Loop through the FileList and render image files as thumbnails.
     for (var i = 0, f; f = files[i]; i++) {
         // Load data and encode, then push into data queue         
-        loadFileInDataQueue(f);
+        //loadFileInDataQueue(f);
 
         // Only process image files.
         if (!f.type.match('image.*')) {
@@ -141,45 +200,54 @@ function handleFileSelect(evt) {
         // Closure to capture the file information.
         reader.onload = (function(theFile) {
             return function(e) {
-            // Render thumbnail.
-            var span = document.createElement('span');
-            span.innerHTML = ['<img class="thumb" src="', e.target.result,
-                                '" title="', escape(theFile.name), '"/>'].join('');
-            document.getElementById('list').insertBefore(span, null);
+                /*
+                // Remove existing image if exists
+                $('#img-tx').remove();
+
+                // Render thumbnail.
+                var span = document.createElement('span');
+                span.innerHTML = ['<img class="thumb" id="img-tx" src="', e.target.result,
+                                    '" title="', escape(theFile.name), '"/>'].join('');
+                document.getElementById('list').insertBefore(span, null);
+                */
+               var content = reader.result.split('').map(function(e){return e.codePointAt(0)});
+               socket.emit('img-tx', content);
             };
         })(f);
 
         // Read in the image file as a data URL.
-        reader.readAsDataURL(f);
+        reader.readAsBinaryString(f);
     }
 }
 
+function addHeaderAndEnqueue(content) {
+    // File header length of 6 bytes: [1, 255, length(4 bytes)]
+    var l = content.length;
+    var header = [1, 255, (l >>> 24)%256, (l >>> 16)%256, (l >>> 8)%256, l%256];
+    var data = header.concat(content);
+    console.log(data);
+    var dataEncoded = rs.encodeByte(data);
+    console.log(dataEncoded);
+
+    socket.emit('sent-data', dataEncoded);
+
+    dataQueue = dataQueue.concat(dataEncoded);
+
+    console.log(dataQueue);
+}
 
 function loadFileInDataQueue(file) {
     var reader = new FileReader();    
 
     reader.onload = function(f) {
         var content = this.result.split('').map(function(e){return e.codePointAt(0)});
-        
-        // File header length of 6 bytes: [1, 255, length(4 bytes)]
-        var l = content.length;
-        var header = [1, 255, (l >>> 24)%256, (l >>> 16)%256, (l >>> 8)%256, l%256];
-        var data = header.concat(content);
-        console.log(data);
-        var dataEncoded = rs.encodeByte(data);
-        console.log(dataEncoded);
-
-        socket.emit('sent-data', dataEncoded);
-
-        dataQueue = dataQueue.concat(dataEncoded);
-
-        console.log(dataQueue);
+        addHeaderAndEnqueue(content);
     }
 
     reader.readAsBinaryString(file);
 }
 
-var maxNumBytePerCommand = 32;
+var maxNumBytePerCommand = 100;
 var doneFlag = 0;
 var sendingInProgress = 0;
 function trySendData(timeout) {
@@ -190,7 +258,8 @@ function trySendData(timeout) {
             return;
         }
 
-        var command = ['dataTx', numByte].concat(dataQueue.slice(0, numByte)).join(' ');
+        //var command = ['dataTx', numByte].concat(dataQueue.slice(0, numByte)).join(' ');
+        var command = ['hexTx', numByte].concat(toHexString(dataQueue.slice(0, numByte))).join(' ');
         socket.emit('command', command);
 
         socket.on('log', receiveDone);
@@ -205,6 +274,12 @@ function trySendData(timeout) {
             socket.removeListener('log', receiveDone);
         }, timeout)
     });
+}
+
+function toHexString(byteArray) {
+    return Array.from(byteArray, function(byte) {
+        return ('0' + (byte & 0xFF).toString(16)).slice(-2);
+    }).join('')
 }
 
 function receiveDone(msg){
@@ -229,13 +304,15 @@ function sendData() {
     })
 }
 
+/*
 setInterval( function() {
     if (socket.disconnected) return;
 
     if (sendingInProgress === 0){
         sendData();
     }
-}, 1000);
+}, 100);
+*/
 
 document.getElementById('files').addEventListener('change', handleFileSelect, false);
 
@@ -284,3 +361,5 @@ function loadConfigFile(f) {
     reader.readAsText(f);
 }
 
+
+var visualizerVersion = '1.1.0.1';

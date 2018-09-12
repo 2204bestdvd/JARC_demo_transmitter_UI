@@ -472,3 +472,4 @@ ReedSolomon.Codec = Class.extend({
 
 });
 
+exports.ReedSolomon = ReedSolomon;

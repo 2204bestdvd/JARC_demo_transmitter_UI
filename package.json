@@ -14,6 +14,7 @@
   },
   "dependencies": {
     "body-parser": "^1.18.3",
+    "compress-images": "^1.3.8",
     "cookie-parser": "^1.4.3",
     "express": "^4.16.3",
     "multer": "^1.3.0",

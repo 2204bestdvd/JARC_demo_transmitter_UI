@@ -291,7 +291,7 @@ It will plot scattered plot always.
 If range doppler heat map is not enabled for the one subframe that has selected the extra plots
 it will plot the range-dopler plot.
 */
-var plotScatterpoints = function(x_coord,y_coord,z_coord,range,doppler,plotEmpty,frameToPlot) {
+var plotScatterpoints = function(x_coord,y_coord,z_coord,range,doppler,plotEmpty,frameToPlot,numDetectedObj) {
     var plot_elapsed_time = {}; // for profile this code only
     var start_time = new Date().getTime();
     
@@ -300,6 +300,7 @@ var plotScatterpoints = function(x_coord,y_coord,z_coord,range,doppler,plotEmpty
     radarPlot.z_coord = z_coord;
     radarPlot.range = range;
     radarPlot.doppler = doppler;
+    radarPlot.numDetectedObj = numDetectedObj;
 
     // Send out data for client to plot
     if (socket) {
@@ -339,7 +340,7 @@ var processDetectedPoints = function(bytevec, byteVecIdx, Params) {
     {
         if ((Params.frameNumber > lastFramePlotted + 1) && (lastFrameSaved<Params.frameNumber))
         {
-            plotScatterpoints(xFrameCoord,yFrameCoord,dummyArr,frameRange,frameDoppler,0,lastFrameSaved);
+            plotScatterpoints(xFrameCoord,yFrameCoord,dummyArr,frameRange,frameDoppler,0,lastFrameSaved,numDetectedObj);
         }
     }
 
@@ -440,20 +441,20 @@ var processDetectedPoints = function(bytevec, byteVecIdx, Params) {
                 it gets to that subframe.*/
             if((Params.currentSubFrameNumber == Params.advFrameCfg.numOfSubFrames-1))
             {
-                elapsed_time = plotScatterpoints(xFrameCoord,yFrameCoord,dummyArr,frameRange,frameDoppler,0,Params.frameNumber);
+                elapsed_time = plotScatterpoints(xFrameCoord,yFrameCoord,dummyArr,frameRange,frameDoppler,0,Params.frameNumber,numDetectedObj);
             }
         }
         else 
         {
-            elapsed_time = plotScatterpoints(x_coord,y_coord,z_coord,range,doppler,1,Params.frameNumber);
+            elapsed_time = plotScatterpoints(x_coord,y_coord,z_coord,range,doppler,1,Params.frameNumber,numDetectedObj);
         }
     } else {
         if(Params.dfeDataOutputMode.mode != 3) {
-            elapsed_time = plotScatterpoints(dummyArr,dummyArr,dummyArr,dummyArr,dummyArr,1,Params.frameNumber);
+            elapsed_time = plotScatterpoints(dummyArr,dummyArr,dummyArr,dummyArr,dummyArr,1,Params.frameNumber,numDetectedObj);
         } else {
             if(Params.currentSubFrameNumber == Params.advFrameCfg.numOfSubFrames-1)
             {
-                elapsed_time = plotScatterpoints(xFrameCoord,yFrameCoord,dummyArr,frameRange,frameDoppler,0,Params.frameNumber);
+                elapsed_time = plotScatterpoints(xFrameCoord,yFrameCoord,dummyArr,frameRange,frameDoppler,0,Params.frameNumber,numDetectedObj);
             }
         }
     }
