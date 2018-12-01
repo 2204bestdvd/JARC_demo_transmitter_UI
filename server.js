@@ -240,4 +240,5 @@ function cliSendLines(lines) {
 
 radar.init(io);
 
+dataSend.init(serialPortCli, parserCli);
 dataSend.startDataSend();

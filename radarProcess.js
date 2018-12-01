@@ -9,6 +9,7 @@ var tprocess1; // defined later
 var dataFrameQueue = [];
 var dataframe;
 var maxNumSubframes = 4;
+var subFrameNumInvalid = -1;
 
 
 var NUM_ANGLE_BINS=64;
@@ -40,6 +41,9 @@ var radarPlot = {
 
 
 var MyUtil = {
+    toPrecision: function(x, p)  {
+        return Number(x.toFixed(p));
+    },
     reshape: function(vec, rows, cols) {
         // matlab column-based reshape: [1:9],3,3 => [1 4 7;2 5 8; 3 6 9]
         // [1:8],4,2 => [1,5;2,6;3,7;4,8]
@@ -463,6 +467,73 @@ var processDetectedPoints = function(bytevec, byteVecIdx, Params) {
     return {rangeIdx: rangeIdx, dopplerIdx: dopplerIdx, numDetectedObj: numDetectedObj}
 };
 
+/* 
+- For xWR14xx and xWR16xx legacy frame are always located in index zero as there is no concept of subframe.
+  In this case, this function will return index ZERO.
+- In the case of advanced frame :
+  All plots (with exception of scatter plot and doppler-range plot) support only one subframe.
+  If multiple subframes select plots other than the scatter/doppler-range, the GUI will plot only
+  the first subframe that selected the plots.
+  If any guimonitor command has a -1 selection for subframe (meaning apply config to all subframes)
+  then GUI will plot subframe zero.
+*/
+var subframeNumberToPlot = function(Params) {
+    var i;
+    
+    /*Is this advanced frame config mode?*/
+    if((Params.platform == mmwInput.Platform.xWR16xx) && (Params.dfeDataOutputMode.mode == 3))
+    {
+        /* need to find the first GUI monitor command that has a valid
+           plot enabled and this will be the subframe that will be plotted*/
+        for(i=0;i<maxNumSubframes;i++)
+        {
+            if((Params.guiMonitor[i].logMagRange == 1) || (Params.guiMonitor[i].noiseProfile == 1) ||
+                (Params.guiMonitor[i].rangeAzimuthHeatMap == 1) || (Params.guiMonitor[i].rangeDopplerHeatMap == 1) ||
+                (Params.guiMonitor[i].statsInfo == 1))
+            {
+                return i;   
+            }
+        }
+
+    }
+    
+    /* xWR14xx and xWR16xx legacy frame are always located in index zero as there is no concept of subframe*/
+    return 0;
+};
+
+
+
+/* 
+- For xWR14xx and xWR16xx legacy frame are always located in index zero as there is no concept of subframe.
+  In this case, this function will return Params.guiMonitor[0].detectedObjects.
+- In the case of advanced frame :
+  In this case, this function will return one if any subframe has detected objects enabled.
+*/
+var checkDetectedObjectsSetting = function(Params) {
+    var i;
+    
+    /*Is this advanced frame config mode?*/
+    if((Params.platform == mmwInput.Platform.xWR16xx) && (Params.dfeDataOutputMode.mode == 3))
+    {
+        /* need to find the first GUI monitor command that has the detected obj
+           plot enabled */
+        for(i=0;i<maxNumSubframes;i++)
+        {
+            if(Params.guiMonitor[i].detectedObjects == 1) 
+            {
+                return 1; //enabled  
+            }
+        }
+    }
+    else
+    {
+        return Params.guiMonitor[0].detectedObjects;
+    }
+    
+    /* default disabled if no subframe is found*/
+    return 0;
+};
+
 
 var processRangeNoiseProfile = function(bytevec, byteVecIdx, Params, isRangeProfile, detObjRes) {
 
@@ -479,7 +550,7 @@ var processRangeNoiseProfile = function(bytevec, byteVecIdx, Params, isRangeProf
         math.multiply(math.subset(rp, math.index(math.range(1,numRangeBin*2,2))), 256)
     );
 
-    /*
+
     if (Params.rangeProfileLogScale == false) {
         math.forEach(rp, function(value, idx, ary) {
             ary[idx] = Params.dspFftScaleCompAll_lin[subFrameNum] * Math.pow(2,value*Params.log2linScale[subFrameNum]);
@@ -489,22 +560,31 @@ var processRangeNoiseProfile = function(bytevec, byteVecIdx, Params, isRangeProf
             ary[idx] = value*Params.log2linScale[subFrameNum]*Params.toDB  + Params.dspFftScaleCompAll_log[subFrameNum];
         });
     }
-    */
+
     var rp_x = math.range(0,numRangeBin);
-    /*
+
     var rp_x = math.multiply(math.range(0,numRangeBin), Params.dataPath[subFrameNum].rangeIdxToMeters).valueOf();
     rp_x = math.subtract(rp_x,Params.compRxChanCfg.rangeBias); //correct regardless of state (measurement or compensation)
     math.forEach(rp_x, function(value, idx, ary) {
                     ary[idx] = math.max(ary[idx],0);
             });
-    */
-        
-    var update = {x:[],y:[]};
 
+            
+    var update = {x:[],y:[],x_det:[],y_det:[]};
     
     update.x = rp_x.valueOf();
     update.y = rp.valueOf();
 
+    if (detObjRes && detObjRes.rangeIdx) {
+        math.forEach(detObjRes.rangeIdx, function(value, idx) {
+            // caution the content of x(1,:) is range index, is this indexing 1-based or 0-based in target code?
+            if (detObjRes.dopplerIdx[idx] == 0) {
+                //rp_det[value] = rp[value];
+                update.x_det.push(rp_x[value]);
+                update.y_det.push(rp[value]);
+            }
+        });
+    }
 
     // Send out data for client to plot
     if (socket) {
@@ -618,43 +698,6 @@ var processData = function (data){
     }
 
 }
-
-var socket;
-
-function init(io) {
-    initComplete = true;
-    tprocess1 = MyUtil.foo(trytimeout, process1);
-
-    Params = parseCfg([], 'xWR16xx', 0x0100);
-
-    if (io) {
-        socket = io;
-    } else {
-        console.log("Socket not provided, plotting may not be functioning");
-    }
-}
-
-
-
-function loadCfg(lines) {
-    var tempParams = parseCfg(lines, 'xWR16xx', 0x0100);
-    if(tempParams.configErrorFlag == 1)
-    {
-        return;
-    }    
-
-    /*save to global params*/
-    Params = tempParams;    
-}
-
-
-module.exports = {
-    processData: processData,
-    loadCfg: loadCfg,
-    init: init
-};
-
-
 
 
 var mmwInput = {
@@ -1126,8 +1169,8 @@ var parseCfg = function(lines, platform, sdkVersionUint16) {
     }
     
     /*find which subframe number to plot*/
-    //P.subFrameToPlot = subframeNumberToPlot(P);
-    //P.detectedObjectsToPlot = checkDetectedObjectsSetting(P);
+    P.subFrameToPlot = subframeNumberToPlot(P);
+    P.detectedObjectsToPlot = checkDetectedObjectsSetting(P);
    
     var totalSubframes;
     if(P.dfeDataOutputMode.mode == 1)
@@ -1231,6 +1274,193 @@ var parseCfg = function(lines, platform, sdkVersionUint16) {
     
     return P;
 };
+
+
+
+var dspFftScalComp2 = function (fftMinSize, fftSize)
+{
+    sLin = fftMinSize/fftSize;
+    //sLog = 20*log10(sLin);
+    return sLin;
+}
+
+var dspFftScalComp1 = function(fftMinSize, fftSize)
+{
+    smin =  (Math.pow((Math.ceil(Math.log2(fftMinSize)/Math.log2(4)-1)),2))/(fftMinSize);
+    sLin =  (Math.pow((Math.ceil(Math.log2(fftSize)/Math.log2(4)-1)),2))/(fftSize);
+    sLin = sLin / smin;
+    //sLog = 20*log10(sLin);
+    return sLin;
+}
+
+/*This function returns the profile index used by the current 
+subframe. This is the "index" in the profileCfg 
+array created in the GUI from all the profileCfgs that the GUI parsed
+and stored in the array.
+
+-If frameCfg is used (either on AR14 or AR16) it is assumed
+that only one profileCfg is used for all chirps listed in the
+frameCfg command (usual assumption). User can configure more
+than one profile by issuing multiple profileCfg commands, 
+but all chirps listed in the frameCfg must point to the same profile.
+This function will find the first chirp in the frameCfg command
+and look for the chirpCfg that contains that chirp. From the 
+chirpCfg it will find the profileID that needs to be used.
+From profileID it will find the index in the profileCfg array.
+
+-If advanced frame config is used, this function return 
+the index where the profileCfg is for the give subframe.
+(from subframe need to find chirpCfg, from chirpCfg need 
+to find profileID and from profile ID we can find the index).
+
+This function returns -1 if the profile index is not found.
+*/
+var getProfileIdx = function(ParamsIn,subFrameNum) {
+    var firstChirp;
+    if(ParamsIn.dfeDataOutputMode.mode == 1)
+    {
+        /* This is legacy frame cfg.*/
+        firstChirp = ParamsIn.frameCfg.chirpStartIdx;
+    }
+    else if(ParamsIn.dfeDataOutputMode.mode == 3)
+    {
+        /* Get first chirp configured for this subframe*/
+        firstChirp = ParamsIn.subFrameCfg[subFrameNum].chirpStartIdx;       
+    }
+    
+    /*find which chirp config command contains this chirp*/
+    var i;
+    var profileId = -1;
+    for(i=0;i<chirpCfgCounter;i++)
+    {
+        if( (firstChirp >= ParamsIn.chirpCfg[i].startIdx) &&
+            (firstChirp <= ParamsIn.chirpCfg[i].endIdx) )
+        {
+            /*found chirpCfg index = i*/
+            /*now get the profile ID from the chirp cfg.
+              Assuming that all chirps in the frame/subframe
+              point to the same profile. Therefore we can
+              get the profile from the very first chirpCfg
+              that is inside the range defined in the frame/subframe.*/
+            profileId = ParamsIn.chirpCfg[i].profileId;
+        }            
+    }
+    if (profileId == -1) return -1;
+    /*find the profile index from the profile ID*/
+    for(i=0;i<profileCfgCounter;i++)
+    {
+        if(ParamsIn.profileCfg[i].profileId == profileId) return i;           
+    }
+    /*did not find profile*/
+    return -1; 
+}
+
+
+/*This function populates the antenna configuration in the dataPath array for
+a given subFrame number.
+  Returns -1 if error.
+  Returns 0 if success.*/
+  var getAntCfg = function(ParamsIn,subFrameNum) {
+    if(ParamsIn.dfeDataOutputMode.mode == 1)
+    {
+        /* This is legacy frame cfg and the
+           antenna configuration can be computed as before.
+           We can use the information stored in the chirpCfg[0]
+           as it should not matter which chirpCfg we choose in 
+           this case.*/
+        if(ParamsIn.chirpCfg[0].numTxAzimAnt == 1)
+        {
+            /*Non-MIMO - this overrides the channelCfg derived values*/
+            ParamsIn.dataPath[0].numTxAzimAnt = 1;
+        }
+        else
+        {
+            /*get configuration from channelCfg*/
+            ParamsIn.dataPath[0].numTxAzimAnt = ParamsIn.channelCfg.numTxAzimAnt;
+        }        
+        /*The other configuration comes directly from channelCfg*/
+        ParamsIn.dataPath[0].numTxElevAnt = ParamsIn.channelCfg.numTxElevAnt;
+        ParamsIn.dataPath[0].numRxAnt = ParamsIn.channelCfg.numRxAnt;
+    }
+    else if(ParamsIn.dfeDataOutputMode.mode == 3)
+    {
+        /*First need to find which chirpCfg is associated with this subframe*/
+        var chirp = ParamsIn.subFrameCfg[subFrameNum].chirpStartIdx;
+        /*find which chirp config command contains this chirp*/
+        var i;
+        var foundFlag = false;
+        for(i=0;i<chirpCfgCounter;i++)
+        {
+            if( (chirp >= ParamsIn.chirpCfg[i].startIdx) &&
+                (chirp <= ParamsIn.chirpCfg[i].endIdx) )
+            {
+                /*found chirpCfg index*/
+                foundFlag = true;
+                break;
+            }            
+        }
+        if(foundFlag == false) return -1;
+        
+        if(ParamsIn.chirpCfg[i].numTxAzimAnt == 1)
+        {
+            /*Non-MIMO - this overrides the channelCfg derived values*/
+            ParamsIn.dataPath[subFrameNum].numTxAzimAnt = 1;
+        }
+        else
+        {
+            /*get configuration from channelCfg*/
+            ParamsIn.dataPath[subFrameNum].numTxAzimAnt = ParamsIn.channelCfg.numTxAzimAnt;
+        }        
+        
+        /*The other configuration comes directly from channelCfg*/
+        ParamsIn.dataPath[subFrameNum].numTxElevAnt = ParamsIn.channelCfg.numTxElevAnt;
+        ParamsIn.dataPath[subFrameNum].numRxAnt = ParamsIn.channelCfg.numRxAnt;
+    }
+    else
+    {
+        return -1;
+    }
+    return 0;
+}
+
+
+/*This function checks if a valid subframe index is received.
+  Returns -1 if subframe index is invalid.
+  Returns 0 if subframe index is valid.
+*/
+var checkSubFrameIdx = function(ParamsIn, subFrameNum, platform, sdkVersionUint16, command) {
+
+    if ((platform == mmwInput.Platform.xWR14xx) || (sdkVersionUint16 == 0x0100))
+    {
+        /* No check done for AR14 as no subframe idx is received.*/    
+        return 0;
+    }    
+
+    if(ParamsIn.dfeDataOutputMode.mode == 1)
+    {
+        /* legacy frame config*/
+        if(subFrameNum != subFrameNumInvalid)
+        {
+            configError(command + " SubFrameIdx must be set to -1 (i.e. N/A).");
+            return -1;
+        }
+        return 0;
+    }
+    else if(ParamsIn.dfeDataOutputMode.mode == 3)
+    {
+        if((subFrameNum >= maxNumSubframes) || (subFrameNum < -1))
+        {
+            configError(command + " SubFrameIdx is invalid.");
+            return -1;
+        }
+        return 0;
+    }
+    else
+    {
+        configError("Make sure dfeDataOutputMode has been configured before " + command + ". dfeDataOutputMode must be set to either 1 or 3.");
+        return -1;
+    }
+}
 
 
 /*This function populates the cmdReceivedFlag array.
@@ -1379,5 +1609,57 @@ var verifyCmdReceived = function(ParamsIn, platform)
     }
     return 0;    
 }
+
+
+var setupPlots = function(Params) {
+    //range_depth
+    var subFrameNum = Params.subFrameToPlot;
+
+    tmp = parseFloat(templateObj.$.ti_widget_textbox_rpymax.getText());
+    if (tmp != NaN) { maxRangeProfileYaxis = Math.abs(tmp); }
+    Params.rangeProfileLogScale = templateObj.$.ti_widget_checkbox_rplogscale.checked;
+    Params.use_restyle = 2;
+    Params.rangeAzimuthHeatMapGridInit=0;    
+}
+
+
+
+var socket;
+
+function init(io) {
+    initComplete = true;
+    tprocess1 = MyUtil.foo(trytimeout, process1);
+
+    //Params = parseCfg([], 'xWR16xx', 0x0101);
+
+    if (io) {
+        socket = io;
+    } else {
+        console.log("Socket not provided, plotting may not be functioning");
+    }
+}
+
+
+
+function loadCfg(lines) {
+    var tempParams = parseCfg(lines, 'xWR16xx', 0x0101);
+    console.log(tempParams);
+    if(tempParams.configErrorFlag == 1)
+    {
+        return;
+    }    
+
+    /*save to global params*/
+    Params = tempParams;    
+}
+
+
+module.exports = {
+    processData: processData,
+    loadCfg: loadCfg,
+    init: init
+};
+
+
 
 

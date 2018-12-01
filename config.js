@@ -51,12 +51,12 @@
             , Hardware_Trigger: true
             , Frame_Duration: 40  // ms
 
-            , Range_Sensitivity: 30  // dB
-            , Doppler_Sensitivity: 30  // dB
+            , Range_Sensitivity: 40  // dB
+            , Doppler_Sensitivity: 40  // dB
             , Num_Virt_Ant: 1
 
-            , Peak_Grouping_Range: false
-            , Peak_Grouping_Doppler: false
+            , Peak_Grouping_Range: true
+            , Peak_Grouping_Doppler: true
 
             , Range_FFT_size: 225
 
@@ -446,7 +446,7 @@
                  chirpCfg: [], frameCfg: {}, guiMonitor: {}, clutterRemoval: {}, lines: [] };
                  
         P.lines.push('% ***************************************************************');
-        
+        /*
         P.lines.push(['% Created for SDK ver',getVersionString(Input.sdkVersionUint16)].join(':'));
         P.lines.push(['% Created using Visualizer ver',visualizerVersion].join(':'));
         P.lines.push(['% Frequency',Input.Frequency_band].join(':'));
@@ -466,7 +466,7 @@
         P.lines.push(['% Range Peak Grouping','enabled'].join(':'));
         P.lines.push(['% Doppler Peak Grouping','enabled'].join(':'));
         P.lines.push(['% Static clutter removal','disabled'].join(':'));
-        
+        */
         P.lines.push('% ***************************************************************');
         
         P.lines.push('sensorStop');
@@ -528,8 +528,14 @@
         return P;
     };    
 
+    var updateParameter = function() {
+        this.Input.Num_Chirps = document.getElementById('num-chirp').value;
+        this.Input.Ramp_Slope = document.getElementById('freq-slope').value;
+    }
+
     mmWaveInput.prototype.init = init;
     mmWaveInput.prototype.generateCfg = generateCfg;
+    mmWaveInput.prototype.updateParameter = updateParameter;
     
 
     // export as AMD/CommonJS module or global variable

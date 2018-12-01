@@ -28,13 +28,21 @@ var dummyTraceRangeDoppler = {
     type: 'scatter'
 };
 
-var dummyTraceLine = {
+var dummyTraceProfile = {
     x: [],
     y: [],
+    name: 'Range Profile',
     mode: 'lines',
     type: 'scatter'
 };
 
+var dummyProfileDetected = {
+    x: [],
+    y: [],
+    name: 'Detected Objects',
+    mode: 'markers',
+    type:'scatter'
+};
 
 /*
 var layout = {
@@ -82,14 +90,16 @@ var layoutRangeDoppler = {
 
 var layoutRangeProfile = {
     margin: {t: 0},
-    xaxis: {range: [0, 256], title: 'Range (m)'},
-    yaxis: {range: [0, 15000], title: 'Relative Power (dB)'}
+    xaxis: {range: [0, 100], title: 'Range (m)'},
+    yaxis: {range: [0, 100], title: 'Relative Power (dB)'},
+    showlegend: true,
+    legend: {x:0.5, y:1.2, font:{size:10}}
 };
 
 
 Plotly.plot('scatter-plot', [dummyTraceScatter], layoutScatter, {scrollZoom: true});
 Plotly.plot('range-doppler-plot', [dummyTraceRangeDoppler], layoutRangeDoppler, {scrollZoom: true});
-Plotly.plot('range-profile-plot', [dummyTraceLine], layoutRangeProfile, {scrollZoom: true});
+Plotly.plot('range-profile-plot', [dummyTraceProfile, dummyProfileDetected], layoutRangeProfile, {scrollZoom: true});
 
 resizePlots = ['scatter-plot', 'range-doppler-plot', 'range-profile-plot'];
 window.onresize = function() {
@@ -120,7 +130,8 @@ function plotRadar(msg) {
 }
 
 function plotRangeProfile(msg) {
-    Plotly.restyle('range-profile-plot', {x: [msg.x], y: [msg.y]});
+    Plotly.restyle('range-profile-plot', {x: [msg.x], y: [msg.y]}, 0);
+    Plotly.restyle('range-profile-plot', {x: [msg.x_det], y: [msg.y_det]}, 1);
 }
 
 
@@ -317,7 +328,7 @@ setInterval( function() {
 document.getElementById('files').addEventListener('change', handleFileSelect, false);
 
 
-document.getElementById('config').addEventListener('change', function (evt) {
+document.getElementById('config-file').addEventListener('change', function (evt) {
     var f = evt.target.files[0];
     loadConfigFile(f);
 });

@@ -1,4 +1,5 @@
 var ReedSolomon = require('./ReedSolomon').ReedSolomon;
+var fs = require('fs');
 
 var dataQueue = [];
 var maxNumBytePerCommand = 100;
@@ -21,6 +22,8 @@ function addHeaderAndEnqueue(content) {
     //socket.emit('sent-data', dataEncoded);
 
     dataQueue = dataQueue.concat(dataEncoded);
+
+    fs.writeFile('debug_sent.txt', dataEncoded, function(err){});
 
     console.log(dataQueue);
 }
@@ -47,16 +50,21 @@ function trySendData(timeout) {
         //var command = ['dataTx', numByte].concat(dataQueue.slice(0, numByte)).join(' ');
         var command = ['hexTx', numByte].concat(toHexString(dataQueue.slice(0, numByte))).join(' ');
         //socket.emit('command', command);
+        serialPortCli.write(command + '\n');
 
+        parserCli.on('data', receiveDone);
         //socket.on('log', receiveDone);
 
         setTimeout(function() {
             if (doneFlag === 1) {
                 resolve(numByte);
             } else {
-                reject(new Error('Timeout for receiving done'));
+                var timeoutMessage = 'Timeout for receiving done';
+                reject(timeoutMessage);
+                console.log(timeoutMessage);
             }
             doneFlag = 0;
+            parserCli.removeListener('data', receiveDone);
             //socket.removeListener('log', receiveDone);
         }, timeout)
     });
@@ -98,5 +106,18 @@ function startDataSend() {
     }, 100);
 }
 
+var serialPortCli;
+var parserCli;
+
+function init(port, parser) {
+    if (port) {
+        serialPortCli = port;
+        parserCli = parser;
+    } else {
+        console.log("Serial connection not provided, could not initiate data sending");
+    }
+}
+
+exports.init = init;
 exports.startDataSend = startDataSend;
 exports.addHeaderAndEnqueue = addHeaderAndEnqueue;

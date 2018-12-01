@@ -6,9 +6,9 @@
     <style>
       * { margin: 0; padding: 0; box-sizing: border-box; }
       body { font: 13px Helvetica, Arial; }
-      form { background: #000; padding: 3px; position: fixed; bottom: 0; width: 100%; }
-      form input { border: 0; padding: 10px; width: 90%; margin-right: .5%; }
-      form button { width: 9%; background: rgb(130, 224, 255); border: none; padding: 10px; }
+      #command-form { background: #000; padding: 3px; position: fixed; bottom: 0; width: 100%; }
+      #command-form input { border: 0; padding: 10px; width: 90%; margin-right: .5%; }
+      #command-form button { width: 9%; background: rgb(130, 224, 255); border: none; padding: 10px; }
       #messages { list-style-type: none; margin: 5%; padding: 0px 0px 100px; }
       #messages li { padding: 5px 10px; }
       #messages li:nth-child(odd) { background: #eee; }
@@ -19,12 +19,12 @@
         clear: both;
       }
       .config { 
-        background: #fff; 
+        background: #eee; 
         float: left;
         padding: 3px; 
         position: fixed; 
         bottom: 50px; 
-        left: 20px; 
+        left: 2vw; 
         width: 30vw; 
       }
       .thumb {
@@ -44,6 +44,21 @@
         content: "";
         display: table;
         clear: both;
+      }
+      
+      .col-25 {
+          float: left;
+          width: 25%;
+          margin-top: 6px;
+      }
+      .col-75 {
+          float: left;
+          width: 75%;
+          margin-top: 6px;
+      }      
+      input[type=cfg] {
+        width:100%;
+        /*margin-left:10px;*/
       }
     </style>
 
@@ -68,7 +83,7 @@
 
     <div class="row">
         <div id="statistics" style="float:left;width:40vw;padding-top:2%;padding-left:2%">
-          <textarea id="radarSummary" rows="10" cols="40" style="margin:5%;margin-top:5%">Number of detected objects:
+          <textarea id="radarSummary" rows="10" style="width:80%;margin:5%;margin-top:5%">Number of detected objects:
           </textarea>
         </div>
 
@@ -86,6 +101,8 @@
     <ul id="messages"></ul>
 
   <div class="config-bar">
+    <div class="config" style="width:100vw;height:150px;bottom:20px;left:0px"></div>
+
     <div class="config" id="load-config">
         <div>
           <h4 id="uart-cli-port">COM10</h4>
@@ -94,27 +111,47 @@
         </div>
         <br>
         <label for="config"> <h4>Load config from file</h4></label>
-        <input type="file" id="config" name='file' text="Load Config"/>
+        <input type="file" id="config-file" name='file' text="Load Config"/>
     </div>
 
-    <div class="config" style="left:300px">
-        <div>
-            <h4>Load default Config</h4>
-            <button type="button" id="generate-config">Configure</button>
+    <div class="config" style="left:35vw">
+      <div class="col-75">
+        <h4>Load default Config</h4>
+      </div>
+      <div class="col-25">
+        <button type="button" id="generate-config">Configure</button>
+      </div>
+      <br>
+      <br>
+      <form class="cfg-form">
+        <!--h5 style="float:left;">Number of chirps per frame</h5-->
+        <div class="col-75">
+          <label for="num-chirp">Number of chirps per frame</label>
         </div>
-  
+        <div class="col-25">
+          <input type="cfg" id="num-chirp" value="128">
+        </div>
+        <br>
+        <!--h5 style="float:left;">Frequency slope (MHz/us)</h5-->
+        <div class="col-75">
+          <label for="freq-slope">Frequency slope (MHz/us)</label>
+        </div>
+        <div class="col-25">
+          <input type="cfg" id="freq-slope" value="10">
+        </div>
+      </form>
     </div>
   </div>      
-    <form id='command-form' action="">
-      <input id="m" autocomplete="off" /><button>Command</button>
-    </form>
+  <form id='command-form' action="">
+    <input id="m" autocomplete="off" /><button>Command</button>
+  </form>
 
-    <script src="ReedSolomon.js"></script>
-    <script src="client.js"></script>
-    <script src="config.js"></script>
+  <script src="ReedSolomon.js"></script>
+  <script src="client.js"></script>
+  <script src="config.js"></script>
 
-    <script src="/socket.io/socket.io.js"></script>
-    <script src="https://code.jquery.com/jquery-1.11.1.js"></script>
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="https://code.jquery.com/jquery-1.11.1.js"></script>
 
     <script>
 /*
@@ -131,7 +168,7 @@ console.log(enc);
       //const socket = io();
       $(function () {
         //var socket = io();
-        $('form').submit(function(){
+        $('#command-form').submit(function(){
           socket.emit('command', $('#m').val());
           $('#m').val('');
           return false;
@@ -173,6 +210,7 @@ console.log(enc);
 
       $("#generate-config").click(function(){
         var mmWave = new mmWaveInput();
+        mmWave.updateParameter();
         var config = mmWave.generateCfg();
         console.log(config.lines);
         socket.emit('cfg-file', config.lines);
